@@ -17,6 +17,7 @@ import com.order.management.entity.Product;
 import com.order.management.entity.Unit;
 import com.order.management.entity.UnitProductMapping;
 import com.order.management.entity.User;
+import com.order.management.enums.PaymentStatus;
 import com.order.management.repository.OrderRepository;
 import com.order.management.repository.ProductRepository;
 import com.order.management.repository.UnitProductMappingRepository;
@@ -46,12 +47,14 @@ public class OrderService {
     @Transactional
     public OrderResponseDTO placeOrder(OrderDTO orderDTO) {
         HashMap<Product, List<Unit>> productUnitMapping = new HashMap<>();
-        User user = userRepository.findById(orderDTO.getUserId()).orElseThrow(() -> new RuntimeException("User not Found"));
-        Product product = productRepository.findById(orderDTO.getProductId()).orElseThrow(() -> new RuntimeException("Product not found"));
-        
-        UnitProductMapping unitPordMap = unitProductMappingRepository.findFirstByProductIdAndUnitIsAvailableTrue(product.getId())
-                                        .orElseThrow(() -> new RuntimeException("Product Out of Stock")); 
-        
+        User user = userRepository.findById(orderDTO.getUserId())
+                .orElseThrow(() -> new RuntimeException("User not Found"));
+        Product product = productRepository.findById(orderDTO.getProductId())
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        UnitProductMapping unitPordMap = unitProductMappingRepository
+                .findFirstByProductIdAndUnitIsAvailableTrue(product.getId())
+                .orElseThrow(() -> new RuntimeException("Product Out of Stock"));
 
         Unit unit = unitPordMap.getUnit();
         unit.setAvailable(false);
@@ -60,10 +63,10 @@ public class OrderService {
         unitList.add(unit);
         productUnitMapping.put(product, unitList);
 
-        Order order = new Order();  
+        Order order = new Order();
         order.setUser(user);
         order.setAmount(product.getPrice());
-        order.setPaymentStatus("PENDING");
+        order.setPaymentStatus(PaymentStatus.PENDING);
         Order SavedOrder = orderRepository.save(order);
 
         UnitProductMapping unitProductMapping = unitProductMappingRepository
@@ -72,8 +75,7 @@ public class OrderService {
 
         product.setStock(product.getStock() - 1);
         productRepository.save(product);
-        
-        
+
         OrderResponseDTO orderResponseDTO = new OrderResponseDTO();
         orderResponseDTO.setId(order.getId());
         orderResponseDTO.setUser(user);
@@ -87,32 +89,42 @@ public class OrderService {
 
         try {
 
-            Order order = orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Order not present"));
+            Order order = orderRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Order not present"));
 
-            if ("DONE".equalsIgnoreCase(order.getPaymentStatus())) {
+            if (order.getPaymentStatus() == PaymentStatus.DONE) {
                 throw new RuntimeException("Payment already completed");
             }
 
-            order.setPaymentStatus("DONE");
+            order.setPaymentStatus(PaymentStatus.DONE);
+
             HashMap<Product, List<Unit>> productUnitMapping = new HashMap<>();
-            
+
             List<UnitProductMapping> unitProductMappings = order.getUnitProductMappings();
-            // unitProductMappingRepository.findByProductIdAndUnitId(order.get)
-            for(UnitProductMapping upm : unitProductMappings){
+
+            for (UnitProductMapping upm : unitProductMappings) {
+
                 Product prd = upm.getProduct();
+
                 Unit unit = upm.getUnit();
-                
-                List<Unit> unitList =  productUnitMapping.getOrDefault(prd, new ArrayList<>());
+
+                List<Unit> unitList = productUnitMapping.getOrDefault(
+                        prd,
+                        new ArrayList<>());
+
                 unitList.add(unit);
-                // productUnitMapping.put(prd, unitList);
+
+                productUnitMapping.put(prd, unitList);
             }
 
             OrderResponseDTO orderResponseDTO = new OrderResponseDTO();
+
             orderResponseDTO.setId(order.getId());
             orderResponseDTO.setUser(order.getUser());
             orderResponseDTO.setDatetime(order.getDatetime());
             orderResponseDTO.setAmount(order.getAmount());
-            orderResponseDTO.setProductUnitMapping(productUnitMapping);
+            orderResponseDTO.setProductUnitMapping(
+                    productUnitMapping);
 
             return orderRepository.save(order);
 
